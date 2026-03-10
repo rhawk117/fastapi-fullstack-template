@@ -4,6 +4,12 @@ required-version = ">=0.15.2"
 fix = true
 unsafe-fixes = true
 
+[format]
+docstring-code-format = true
+preview = true
+quote-style = "single"
+
+
 [lint]
 select = [
 	"E",
@@ -64,7 +70,7 @@ ignore = [
 	"S104",
 	"S105",
 	"TC002",
-	"TC003"
+	"TC003",
 ]
 
 
@@ -95,8 +101,3 @@ runtime-evaluated-decorators = [
 
 [lint.pylint]
 allow-dunder-method-names = ["__tablename__", "__table_args__"]
-
-[format]
-docstring-code-format = true
-preview = true
-quote-style = "single"

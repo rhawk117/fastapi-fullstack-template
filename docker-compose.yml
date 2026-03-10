@@ -1,0 +1,89 @@
+volumes:
+  pgdata: {}
+  uv_cache: {}
+
+networks:
+  backend: {}
+
+services:
+  db:
+    image: postgres:17.6-alpine
+    container_name: scheduler_postgres_db
+    restart: always
+    env_file: [".env"]
+    networks:
+      - backend
+    ports:
+      - 5432:5432 # dev only; in prod, use internal networking
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deployment/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: >
+      -c config_file=/etc/postgresql/postgresql.conf
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      TZ: ${TZ:-UTC}
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1",
+        ]
+
+  redis:
+    image: redis:8.2.2-alpine3.22
+    container_name: scheduler_redis
+    restart: always
+    env_file: [".env"]
+    networks: [backend]
+    ports: [6379:6379] # dev only; in prod, use internal networking
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: >
+      sh -c '
+        exec redis-server --appendonly no --requirepass "$$REDIS_PASSWORD"
+      '
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      test:
+        [
+          "CMD-SHELL",
+          'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -q PONG',
+        ]
+
+  api:
+    container_name: scheduler_backend_server
+    env_file: [".env"]
+    networks: [backend]
+    ports: [8000:8000]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - uv_cache:/app/uv_cache
+      - ./backend:/app/backend
+      - ./migrations:/app/migrations
+    environment:
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-dev}
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      REDIS_APP_DB: ${REDIS_APP_DB:-0}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      TZ: ${TZ:-UTC}
+      DEV_MODE_LOGS: false
